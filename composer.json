@@ -1,5 +1,5 @@
 {
-  "name": "easylo/RESTCors-bundle",
+  "name": "easylo/rest-cors-bundle",
   "description": "RESTCors Bundle for Symfony2",
   "keywords": ["REST", "CORS", "symfony2"],
   "license": "MIT",
