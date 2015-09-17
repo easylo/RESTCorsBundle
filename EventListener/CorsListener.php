@@ -2,13 +2,14 @@
 
 namespace Easylo\RESTCorsBundle\EventListener;
 
+use Symfony\Component\Routing\Router;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Nelmio\CorsBundle\Options\ResolverInterface;
+
 
 class CorsListener
 {
@@ -23,13 +24,15 @@ class CorsListener
     );
     protected $dispatcher;
     protected $options;
-    /** @var ResolverInterface */
-    protected $configurationResolver;
-    public function __construct(EventDispatcherInterface $dispatcher, ResolverInterface $configurationResolver)
+    protected $router;
+
+
+    public function __construct(EventDispatcherInterface $dispatcher, Router $router)
     {
         $this->dispatcher = $dispatcher;
-        $this->configurationResolver = $configurationResolver;
+        $this->router = $router;
     }
+
     public function onKernelRequest(GetResponseEvent $event)
     {
         if (HttpKernelInterface::MASTER_REQUEST !== $event->getRequestType()) {
@@ -40,12 +43,15 @@ class CorsListener
         if (!$request->headers->has('Origin') || $request->headers->get('Origin') == $request->getSchemeAndHttpHost()) {
             return;
         }
-        $options = $this->configurationResolver->getOptions($request);
-        if (!$options) {
-            return;
-        }
+        $options = array();
+        $options['allow_credentials'] = true;
+        $options['allow_headers'] = true;
+        $options['allow_methods'] = $this->getRouteAllowMethods($request);
+
         // perform preflight checks
         if ('OPTIONS' === $request->getMethod()) {
+            //$options = array();
+
             $event->setResponse($this->getPreflightResponse($request, $options));
             return;
         }
@@ -55,23 +61,42 @@ class CorsListener
         $this->dispatcher->addListener('kernel.response', array($this, 'onKernelResponse'));
         $this->options = $options;
     }
-    public function onKernelResponse(FilterResponseEvent $event)
+
+    protected function getRouteAllowMethods(Request $request)
     {
-        if (HttpKernelInterface::MASTER_REQUEST !== $event->getRequestType()) {
-            return;
+        $options = array();
+        $pathinfo = $request->getPathInfo();
+
+        $collection = $this->router->getRouteCollection();
+        $allRoutes = $collection->all();
+        foreach ($allRoutes as $routeName => $route) {
+            $compiledRoute = $route->compile();
+
+            // check the static prefix of the URL first. Only use the more expensive preg_match when it matches
+            if ('' !== $compiledRoute->getStaticPrefix() && 0 !== strpos($pathinfo, $compiledRoute->getStaticPrefix())) {
+                continue;
+            }
+
+            if (!preg_match($compiledRoute->getRegex(), $pathinfo, $matches)) {
+                continue;
+            }
+
+            $hostMatches = array();
+            if ($compiledRoute->getHostRegex() && !preg_match($compiledRoute->getHostRegex(), $this->context->getHost(), $hostMatches)) {
+                continue;
+            }
+
+            foreach ($route->getMethods() as $routeMethods) {
+                $options[] = $routeMethods;
+            }
+
         }
-        $response = $event->getResponse();
-        $request = $event->getRequest();
-        // add CORS response headers
-        $response->headers->set('Access-Control-Allow-Origin', $request->headers->get('Origin'));
-        if ($this->options['allow_credentials']) {
-            $response->headers->set('Access-Control-Allow-Credentials', 'true');
-        }
-        if ($this->options['expose_headers']) {
-            $response->headers->set('Access-Control-Expose-Headers', strtolower(implode(', ', $this->options['expose_headers'])));
-        }
+
+        return $options;
+
     }
-    protected function getPreflightResponse(Request $request, array $options)
+
+    protected function getPreflightResponse(Request $request, array $options = array())
     {
         $response = new Response();
         if ($options['allow_credentials']) {
@@ -86,18 +111,18 @@ class CorsListener
                 : implode(', ', $options['allow_headers']);
             $response->headers->set('Access-Control-Allow-Headers', $headers);
         }
-        if ($options['max_age']) {
+        /*if ($options['max_age']) {
             $response->headers->set('Access-Control-Max-Age', $options['max_age']);
         }
         if (!$this->checkOrigin($request, $options)) {
             $response->headers->set('Access-Control-Allow-Origin', 'null');
             return $response;
-        }
+        }*/
         $response->headers->set('Access-Control-Allow-Origin', $request->headers->get('Origin'));
         // check request method
         if (!in_array(strtoupper($request->headers->get('Access-Control-Request-Method')), $options['allow_methods'], true)) {
-            $response->setStatusCode(405);
-            return $response;
+            //$response->setStatusCode(405);
+            //return $response;
         }
         /**
          * We have to allow the header in the case-set as we received it by the client.
@@ -118,13 +143,14 @@ class CorsListener
                 }
                 if (!in_array($header, $options['allow_headers'], true)) {
                     $response->setStatusCode(400);
-                    $response->setContent('Unauthorized header '.$header);
+                    $response->setContent('Unauthorized header ' . $header);
                     break;
                 }
             }
         }
         return $response;
     }
+
     protected function checkOrigin(Request $request, array $options)
     {
         // check origin
@@ -132,8 +158,8 @@ class CorsListener
         if ($options['allow_origin'] === true) return true;
         if ($options['origin_regex'] === true) {
             // origin regex matching
-            foreach($options['allow_origin'] as $originRegexp) {
-                if (preg_match('{'.$originRegexp.'}i', $origin)) {
+            foreach ($options['allow_origin'] as $originRegexp) {
+                if (preg_match('{' . $originRegexp . '}i', $origin)) {
                     return true;
                 }
             }
@@ -146,10 +172,21 @@ class CorsListener
         return false;
     }
 
-    protected function getRouteAllowMethods()
+    public function onKernelResponse(FilterResponseEvent $event)
     {
-        $router = $this->get('router');
-        $route = $router->match('/foo')['_route'];
+        if (HttpKernelInterface::MASTER_REQUEST !== $event->getRequestType()) {
+            return;
+        }
+        $response = $event->getResponse();
+        $request = $event->getRequest();
+        // add CORS response headers
+        $response->headers->set('Access-Control-Allow-Origin', $request->headers->get('Origin'));
+        if ($this->options['allow_credentials']) {
+            $response->headers->set('Access-Control-Allow-Credentials', 'true');
+        }
+        if ($this->options['expose_headers']) {
+            $response->headers->set('Access-Control-Expose-Headers', strtolower(implode(', ', $this->options['expose_headers'])));
+        }
     }
 
 }

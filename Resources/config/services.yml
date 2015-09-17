@@ -1,0 +1,10 @@
+
+parameters:
+      easylo_rest_cors.cors_listener.class: Easylo\RESTCorsBundle\EventListener\CorsListener
+
+services:
+    easylo_rest_cors.cors_listener:
+        class: %easylo_rest_cors.cors_listener.class%
+        arguments: [@event_dispatcher, @router]
+        tags:
+            - { name: kernel.event_listener, event: kernel.request, method: onKernelRequest, priority: 10000  }
