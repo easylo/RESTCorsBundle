@@ -46,6 +46,7 @@ class CorsListener
         $options = array();
         $options['allow_credentials'] = true;
         $options['allow_headers'] = true;
+        $options['allow_origin'] = true;
         $options['allow_methods'] = $this->getRouteAllowMethods($request);
 
         // perform preflight checks
