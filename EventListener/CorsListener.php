@@ -185,9 +185,6 @@ class CorsListener
         if ($this->options['allow_credentials']) {
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
         }
-        if ($this->options['expose_headers']) {
-            $response->headers->set('Access-Control-Expose-Headers', strtolower(implode(', ', $this->options['expose_headers'])));
-        }
     }
 
 }
