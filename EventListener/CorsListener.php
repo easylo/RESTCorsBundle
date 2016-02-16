@@ -2,30 +2,28 @@
 
 namespace Easylo\RESTCorsBundle\EventListener;
 
-use Symfony\Component\Routing\Router;
-use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-
+use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\Routing\Router;
 
 class CorsListener
 {
     /**
-     * Simple headers as defined in the spec should always be accepted
+     * Simple headers as defined in the spec should always be accepted.
      */
-    protected static $simpleHeaders = array(
+    protected static $simpleHeaders = [
         'accept',
         'accept-language',
         'content-language',
         'origin',
-    );
+    ];
     protected $dispatcher;
     protected $options;
     protected $router;
-
 
     public function __construct(EventDispatcherInterface $dispatcher, Router $router)
     {
@@ -43,7 +41,7 @@ class CorsListener
         if (!$request->headers->has('Origin') || $request->headers->get('Origin') == $request->getSchemeAndHttpHost()) {
             return;
         }
-        $options = array();
+        $options = [];
         $options['allow_credentials'] = true;
         $options['allow_headers'] = true;
         $options['allow_origin'] = true;
@@ -54,18 +52,19 @@ class CorsListener
             //$options = array();
 
             $event->setResponse($this->getPreflightResponse($request, $options));
+
             return;
         }
         if (!$this->checkOrigin($request, $options)) {
             return;
         }
-        $this->dispatcher->addListener('kernel.response', array($this, 'onKernelResponse'));
+        $this->dispatcher->addListener('kernel.response', [$this, 'onKernelResponse']);
         $this->options = $options;
     }
 
     protected function getRouteAllowMethods(Request $request)
     {
-        $options = array();
+        $options = [];
         $pathinfo = $request->getPathInfo();
 
         $collection = $this->router->getRouteCollection();
@@ -82,7 +81,7 @@ class CorsListener
                 continue;
             }
 
-            $hostMatches = array();
+            $hostMatches = [];
             if ($compiledRoute->getHostRegex() && !preg_match($compiledRoute->getHostRegex(), $this->context->getHost(), $hostMatches)) {
                 continue;
             }
@@ -90,14 +89,12 @@ class CorsListener
             foreach ($route->getMethods() as $routeMethods) {
                 $options[] = $routeMethods;
             }
-
         }
 
         return $options;
-
     }
 
-    protected function getPreflightResponse(Request $request, array $options = array())
+    protected function getPreflightResponse(Request $request, array $options = [])
     {
         $response = new Response();
         if ($options['allow_credentials']) {
@@ -125,7 +122,7 @@ class CorsListener
             //$response->setStatusCode(405);
             //return $response;
         }
-        /**
+        /*
          * We have to allow the header in the case-set as we received it by the client.
          * Firefox f.e. sends the LINK method as "Link", and we have to allow it like this or the browser will deny the
          * request.
@@ -144,11 +141,12 @@ class CorsListener
                 }
                 if (!in_array($header, $options['allow_headers'], true)) {
                     $response->setStatusCode(400);
-                    $response->setContent('Unauthorized header ' . $header);
+                    $response->setContent('Unauthorized header '.$header);
                     break;
                 }
             }
         }
+
         return $response;
     }
 
@@ -156,11 +154,13 @@ class CorsListener
     {
         // check origin
         $origin = $request->headers->get('Origin');
-        if ($options['allow_origin'] === true) return true;
+        if ($options['allow_origin'] === true) {
+            return true;
+        }
         if ($options['origin_regex'] === true) {
             // origin regex matching
             foreach ($options['allow_origin'] as $originRegexp) {
-                if (preg_match('{' . $originRegexp . '}i', $origin)) {
+                if (preg_match('{'.$originRegexp.'}i', $origin)) {
                     return true;
                 }
             }
@@ -170,6 +170,7 @@ class CorsListener
                 return true;
             }
         }
+
         return false;
     }
 
@@ -186,5 +187,4 @@ class CorsListener
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
         }
     }
-
 }
